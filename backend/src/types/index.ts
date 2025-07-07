@@ -21,6 +21,7 @@ export interface AuthenticatedUser {
   userType: UserType;
   status: UserStatus;
   avatar?: string;
+  emailVerified?: boolean;
 }
 
 export interface AuthRequest extends Request {
