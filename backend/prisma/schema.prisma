@@ -1,0 +1,712 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ================================
+// ENUMS
+// ================================
+
+enum UserType {
+  CLIENT
+  PROFESSIONAL
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  DEBIT_CARD
+  PIX
+  BANK_SLIP
+  BANK_TRANSFER
+}
+
+enum NotificationType {
+  BOOKING_UPDATE
+  MESSAGE
+  PAYMENT
+  REVIEW
+  SYSTEM
+  PROMOTION
+  REMINDER
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum RequestStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  SYSTEM
+}
+
+enum FileType {
+  IMAGE
+  DOCUMENT
+  VIDEO
+  AUDIO
+  OTHER
+}
+
+// ================================
+// CORE MODELS
+// ================================
+
+model User {
+  id                String     @id @default(cuid())
+  email             String     @unique
+  password          String
+  name              String
+  avatar            String?
+  phone             String?
+  userType          UserType
+  status            UserStatus @default(PENDING_VERIFICATION)
+  emailVerified     Boolean    @default(false)
+  emailVerifiedAt   DateTime?
+  phoneVerified     Boolean    @default(false)
+  phoneVerifiedAt   DateTime?
+  lastLoginAt       DateTime?
+  
+  // Profile fields
+  bio               String?
+  website           String?
+  location          Json?      // { city, state, country, lat, lng }
+  settings          Json?      // User preferences and settings
+  
+  // Professional specific fields
+  professionalProfile ProfessionalProfile?
+  
+  // Timestamps
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  
+  // Relations
+  sentMessages      Message[]  @relation("MessageSender")
+  receivedMessages  Message[]  @relation("MessageReceiver")
+  conversations     ConversationParticipant[]
+  
+  clientBookings    Booking[]  @relation("ClientBookings")
+  professionalBookings Booking[] @relation("ProfessionalBookings")
+  
+  clientPayments    Payment[]  @relation("ClientPayments")
+  professionalPayments Payment[] @relation("ProfessionalPayments")
+  
+  givenReviews      Review[]   @relation("ReviewGiver")
+  receivedReviews   Review[]   @relation("ReviewReceiver")
+  
+  notifications     Notification[]
+  
+  services          Service[]
+  requests          Request[]
+  proposals         Proposal[]
+  files             File[]
+  
+  // Stripe
+  stripeCustomerId  String?
+  stripeAccountId   String?
+  
+  @@index([email])
+  @@index([userType])
+  @@index([status])
+  @@map("users")
+}
+
+model ProfessionalProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Professional details
+  experience        Int?     // Years of experience
+  hourlyRate        Float?
+  rating            Float?   @default(0)
+  totalReviews      Int      @default(0)
+  totalJobs         Int      @default(0)
+  responseTime      Int?     // Average response time in minutes
+  
+  // Verification
+  verified          Boolean  @default(false)
+  verifiedAt        DateTime?
+  verificationDocs  Json?    // Array of verification document URLs
+  
+  // Availability
+  availability      Json?    // Weekly schedule, working hours
+  isAvailable       Boolean  @default(true)
+  
+  // Portfolio
+  portfolio         Json?    // Array of portfolio items with images/descriptions
+  skills            String[] // Array of skills
+  certifications    Json?    // Array of certifications
+  
+  // Business info
+  businessName      String?
+  businessLicense   String?
+  insurance         Json?    // Insurance information
+  
+  // Bank details for payments
+  bankDetails       Json?    // Encrypted bank account details
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("professional_profiles")
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  icon        String?
+  image       String?
+  parentId    String?
+  parent      Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+  
+  // Display
+  isActive        Boolean @default(true)
+  sortOrder       Int     @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  services    Service[]
+  requests    Request[]
+  
+  @@map("categories")
+}
+
+model Service {
+  id            String   @id @default(cuid())
+  title         String
+  description   String
+  shortDescription String?
+  
+  // Professional
+  professionalId String
+  professional   User     @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  
+  // Category
+  categoryId    String
+  category      Category @relation(fields: [categoryId], references: [id])
+  
+  // Pricing
+  basePrice     Float
+  priceType     String   // 'fixed', 'hourly', 'custom'
+  packages      Json?    // Service packages with different pricing tiers
+  
+  // Location
+  serviceArea   Json?    // Geographic areas where service is offered
+  isRemote      Boolean  @default(false)
+  
+  // Media
+  images        String[] // Array of image URLs
+  videos        String[] // Array of video URLs
+  
+  // Service details
+  duration      Int?     // Estimated duration in minutes
+  requirements  String?  // Requirements from client
+  includes      String[] // What's included in the service
+  excludes      String[] // What's not included
+  
+  // Availability
+  isActive      Boolean  @default(true)
+  isPromoted    Boolean  @default(false)
+  
+  // Stats
+  viewCount     Int      @default(0)
+  orderCount    Int      @default(0)
+  
+  // SEO
+  slug          String   @unique
+  metaTitle     String?
+  metaDescription String?
+  tags          String[] // Search tags
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  bookings      Booking[]
+  reviews       Review[]
+  requests      Request[]
+  
+  @@index([professionalId])
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([slug])
+  @@map("services")
+}
+
+model Request {
+  id            String        @id @default(cuid())
+  title         String
+  description   String
+  
+  // Client
+  clientId      String
+  client        User          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  // Category
+  categoryId    String
+  category      Category      @relation(fields: [categoryId], references: [id])
+  
+  // Service (optional - if request is for specific service)
+  serviceId     String?
+  service       Service?      @relation(fields: [serviceId], references: [id])
+  
+  // Budget
+  budget        Float?
+  budgetType    String?       // 'fixed', 'range', 'negotiable'
+  budgetMax     Float?
+  
+  // Location and timing
+  location      Json?         // Address where service is needed
+  desiredDate   DateTime?
+  urgency       String        @default("normal") // 'low', 'normal', 'high', 'urgent'
+  
+  // Requirements
+  requirements  String[]
+  attachments   String[]      // File URLs
+  
+  // Status
+  status        RequestStatus @default(OPEN)
+  
+  // Visibility
+  isPublic      Boolean       @default(true)
+  expiresAt     DateTime?
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Relations
+  proposals     Proposal[]
+  
+  @@map("requests")
+}
+
+model Proposal {
+  id            String         @id @default(cuid())
+  
+  // Request
+  requestId     String
+  request       Request        @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  
+  // Professional
+  professionalId String
+  professional   User          @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  
+  // Proposal details
+  message       String
+  price         Float
+  timeline      String         // Estimated timeline
+  includes      String[]       // What's included
+  attachments   String[]       // Portfolio/reference URLs
+  
+  // Status
+  status        ProposalStatus @default(PENDING)
+  
+  // Timing
+  validUntil    DateTime?
+  respondedAt   DateTime?
+  
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  @@unique([requestId, professionalId]) // One proposal per professional per request
+  @@map("proposals")
+}
+
+model Booking {
+  id                String        @id @default(cuid())
+  
+  // Parties
+  clientId          String
+  client            User          @relation("ClientBookings", fields: [clientId], references: [id])
+  professionalId    String
+  professional      User          @relation("ProfessionalBookings", fields: [professionalId], references: [id])
+  
+  // Service details
+  serviceId         String?
+  service           Service?      @relation(fields: [serviceId], references: [id])
+  title             String        // Service title at time of booking
+  description       String
+  
+  // Pricing
+  price             Float
+  currency          String        @default("BRL")
+  
+  // Timing
+  scheduledDate     DateTime
+  startTime         DateTime?
+  endTime           DateTime?
+  duration          Int?          // Duration in minutes
+  
+  // Location
+  location          Json          // Service location details
+  
+  // Status
+  status            BookingStatus @default(PENDING)
+  
+  // Completion
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  cancellationReason String?
+  
+  // Special instructions
+  notes             String?
+  requirements      String[]
+  
+  // Files
+  attachments       String[]      // Client attachments
+  workPhotos        String[]      // Professional work photos
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  // Relations
+  payments          Payment[]
+  reviews           Review[]
+  messages          Message[]
+  notifications     Notification[]
+  conversations     Conversation[]
+  
+  @@index([clientId])
+  @@index([professionalId])
+  @@index([status])
+  @@index([scheduledDate])
+  @@map("bookings")
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  
+  // Parties
+  clientId          String
+  client            User          @relation("ClientPayments", fields: [clientId], references: [id])
+  professionalId    String
+  professional      User          @relation("ProfessionalPayments", fields: [professionalId], references: [id])
+  
+  // Booking
+  bookingId         String
+  booking           Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  // Payment details
+  amount            Float
+  currency          String        @default("BRL")
+  method            PaymentMethod
+  status            PaymentStatus @default(PENDING)
+  
+  // Stripe integration
+  stripePaymentIntentId String?
+  stripeChargeId        String?
+  stripeTransferId      String?
+  
+  // Fees and calculations
+  platformFee       Float         // CorujaFix commission
+  stripeFee         Float?        // Stripe processing fee
+  professionalAmount Float        // Amount professional receives
+  
+  // Timing
+  paidAt            DateTime?
+  releasedAt        DateTime?     // When money is released to professional
+  refundedAt        DateTime?
+  
+  // Metadata
+  metadata          Json?
+  failureReason     String?
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  @@index([bookingId])
+  @@index([status])
+  @@index([clientId])
+  @@index([professionalId])
+  @@map("payments")
+}
+
+model Review {
+  id                String   @id @default(cuid())
+  
+  // Parties
+  reviewerId        String
+  reviewer          User     @relation("ReviewGiver", fields: [reviewerId], references: [id])
+  revieweeId        String
+  reviewee          User     @relation("ReviewReceiver", fields: [revieweeId], references: [id])
+  
+  // Related booking and service
+  bookingId         String   @unique
+  booking           Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  serviceId         String?
+  service           Service? @relation(fields: [serviceId], references: [id])
+  
+  // Review content
+  rating            Int      // 1-5 stars
+  title             String?
+  comment           String
+  pros              String[] // What was good
+  cons              String[] // What could be improved
+  
+  // Professional response
+  response          String?
+  respondedAt       DateTime?
+  
+  // Verification
+  isVerified        Boolean  @default(false)
+  
+  // Helpfulness
+  helpfulCount      Int      @default(0)
+  
+  // Photos/evidence
+  photos            String[]
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("reviews")
+}
+
+// ================================
+// COMMUNICATION MODELS
+// ================================
+
+model Conversation {
+  id            String   @id @default(cuid())
+  
+  // Type and metadata
+  type          String   @default("direct") // 'direct', 'group', 'support'
+  title         String?
+  description   String?
+  
+  // Related booking (optional)
+  bookingId     String?
+  booking       Booking? @relation(fields: [bookingId], references: [id])
+  
+  // Last activity
+  lastMessageAt DateTime?
+  lastMessage   String?
+  
+  // Status
+  isActive      Boolean  @default(true)
+  isArchived    Boolean  @default(false)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  participants  ConversationParticipant[]
+  messages      Message[]
+  
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Participant status
+  joinedAt       DateTime     @default(now())
+  leftAt         DateTime?
+  isActive       Boolean      @default(true)
+  
+  // Message tracking
+  lastReadAt     DateTime?
+  unreadCount    Int          @default(0)
+  
+  // Notifications
+  isMuted        Boolean      @default(false)
+  
+  @@unique([conversationId, userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  
+  // Conversation
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  // Sender
+  senderId       String
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id])
+  
+  // Receiver (for direct messages)
+  receiverId     String?
+  receiver       User?        @relation("MessageReceiver", fields: [receiverId], references: [id])
+  
+  // Content
+  type           MessageType  @default(TEXT)
+  content        String
+  attachments    String[]     // File URLs
+  
+  // Related booking (optional)
+  bookingId      String?
+  booking        Booking?     @relation(fields: [bookingId], references: [id])
+  
+  // Message status
+  isRead         Boolean      @default(false)
+  readAt         DateTime?
+  isEdited       Boolean      @default(false)
+  editedAt       DateTime?
+  isDeleted      Boolean      @default(false)
+  deletedAt      DateTime?
+  
+  // Metadata
+  metadata       Json?
+  
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@map("messages")
+}
+
+model Notification {
+  id            String              @id @default(cuid())
+  
+  // Recipient
+  userId        String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Notification details
+  type          NotificationType
+  priority      NotificationPriority @default(NORMAL)
+  title         String
+  message       String
+  
+  // Related entities
+  bookingId     String?
+  booking       Booking?            @relation(fields: [bookingId], references: [id])
+  
+  // Action
+  actionUrl     String?
+  actionText    String?
+  
+  // Status
+  isRead        Boolean             @default(false)
+  readAt        DateTime?
+  
+  // Delivery
+  sentViaEmail  Boolean             @default(false)
+  sentViaPush   Boolean             @default(false)
+  sentViaSMS    Boolean             @default(false)
+  
+  // Expiration
+  expiresAt     DateTime?
+  
+  // Metadata
+  metadata      Json?
+  
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+  @@map("notifications")
+}
+
+// ================================
+// FILE MANAGEMENT
+// ================================
+
+model File {
+  id            String   @id @default(cuid())
+  
+  // Owner
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // File details
+  filename      String
+  originalName  String
+  mimetype      String
+  size          Int      // Size in bytes
+  type          FileType
+  
+  // Storage
+  url           String   // CDN URL
+  cloudinaryId  String?  // Cloudinary public ID
+  
+  // Organization
+  folder        String?  // Logical folder/category
+  tags          String[] // Search tags
+  
+  // Access control
+  isPublic      Boolean  @default(false)
+  
+  // Metadata
+  metadata      Json?    // EXIF data, dimensions, etc.
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("files")
+}
+
+// Indexes are now defined within each model using @@index directive
