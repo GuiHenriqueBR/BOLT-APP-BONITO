@@ -17,121 +17,73 @@ import {
   Filter,
   BarChart3,
   PieChart,
-  Activity
+  Activity,
+  RefreshCw,
+  Bell,
+  TrendingDown,
+  Target,
+  Lightbulb
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { dashboardService, DashboardStats } from '../../services/dashboardService';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 const EnhancedClientDashboard: React.FC = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState('month');
-  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [dashboardData, setDashboardData] = useState<DashboardStats | null>(null);
+  const [insights, setInsights] = useState<string[]>([]);
+  const [showInsights, setShowInsights] = useState(true);
 
   useEffect(() => {
     loadDashboardData();
-  }, [selectedPeriod]);
+  }, [selectedPeriod, user?.id]);
+
+  useEffect(() => {
+    if (dashboardData && user?.id) {
+      loadInsights();
+    }
+  }, [dashboardData, user?.id]);
 
   const loadDashboardData = async () => {
+    if (!user?.id) return;
+    
     try {
       setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock dashboard data
-      setDashboardData({
-        stats: {
-          totalSpent: 2450,
-          totalServices: 12,
-          averageRating: 4.8,
-          savedAmount: 380,
-          favoriteServices: 8,
-          activeBookings: 3
-        },
-        monthlySpending: [
-          { month: 'Jan', amount: 450 },
-          { month: 'Fev', amount: 320 },
-          { month: 'Mar', amount: 680 },
-          { month: 'Abr', amount: 520 },
-          { month: 'Mai', amount: 480 }
-        ],
-        categorySpending: [
-          { category: 'Elétrica', amount: 850, percentage: 35 },
-          { category: 'Limpeza', amount: 620, percentage: 25 },
-          { category: 'Hidráulica', amount: 480, percentage: 20 },
-          { category: 'Jardinagem', amount: 300, percentage: 12 },
-          { category: 'Outros', amount: 200, percentage: 8 }
-        ],
-        recentServices: [
-          {
-            id: '1',
-            title: 'Instalação Elétrica',
-            professional: 'Carlos Silva',
-            status: 'completed',
-            date: '2024-01-15',
-            rating: 5,
-            price: 150,
-            image: 'https://images.pexels.com/photos/257736/pexels-photo-257736.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=2'
-          },
-          {
-            id: '2',
-            title: 'Limpeza Residencial',
-            professional: 'Maria Santos',
-            status: 'in_progress',
-            date: '2024-01-20',
-            price: 80,
-            image: 'https://images.pexels.com/photos/4254167/pexels-photo-4254167.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=2'
-          },
-          {
-            id: '3',
-            title: 'Reparo Hidráulico',
-            professional: 'João Ferreira',
-            status: 'pending',
-            date: '2024-01-25',
-            price: 120,
-            image: 'https://images.pexels.com/photos/1216589/pexels-photo-1216589.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=2'
-          }
-        ],
-        recommendations: [
-          {
-            id: '1',
-            title: 'Manutenção Preventiva Elétrica',
-            professional: 'Carlos Silva',
-            price: 80,
-            rating: 4.9,
-            image: 'https://images.pexels.com/photos/257736/pexels-photo-257736.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=2'
-          },
-          {
-            id: '2',
-            title: 'Limpeza Pós-Obra',
-            professional: 'Ana Costa',
-            price: 150,
-            rating: 5.0,
-            image: 'https://images.pexels.com/photos/4254167/pexels-photo-4254167.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=2'
-          }
-        ],
-        upcomingBookings: [
-          {
-            id: '1',
-            title: 'Limpeza Semanal',
-            professional: 'Maria Santos',
-            date: '2024-01-28',
-            time: '09:00',
-            status: 'confirmed'
-          },
-          {
-            id: '2',
-            title: 'Manutenção Jardim',
-            professional: 'Pedro Alves',
-            date: '2024-01-30',
-            time: '14:00',
-            status: 'pending'
-          }
-        ]
-      });
+      const data = await dashboardService.getClientDashboardData(user.id, selectedPeriod);
+      setDashboardData(data);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadInsights = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const userInsights = await dashboardService.getUserInsights(user.id);
+      setInsights(userInsights);
+    } catch (error) {
+      console.error('Error loading insights:', error);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (!user?.id) return;
+    
+    try {
+      setRefreshing(true);
+      const data = await dashboardService.refreshDashboardData(user.id, 'client');
+      setDashboardData(data);
+      await loadInsights();
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -165,10 +117,39 @@ const EnhancedClientDashboard: React.FC = () => {
     }
   };
 
+  const getPeriodLabel = (period: string) => {
+    switch (period) {
+      case 'week': return 'Esta semana';
+      case 'month': return 'Este mês';
+      case 'quarter': return 'Últimos 3 meses';
+      case 'year': return 'Este ano';
+      default: return 'Este mês';
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20 flex items-center justify-center">
         <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+
+  if (!dashboardData) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            Erro ao carregar dados
+          </h2>
+          <button
+            onClick={loadDashboardData}
+            className="btn-primary px-6 py-3"
+          >
+            Tentar novamente
+          </button>
+        </div>
       </div>
     );
   }
@@ -185,11 +166,20 @@ const EnhancedClientDashboard: React.FC = () => {
                 Olá, {user?.name?.split(' ')[0]}! 👋
               </h1>
               <p className="text-gray-600 dark:text-gray-400">
-                Aqui está um resumo das suas atividades
+                Aqui está um resumo das suas atividades em {getPeriodLabel(selectedPeriod).toLowerCase()}
               </p>
             </div>
             
             <div className="flex items-center space-x-4">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex items-center space-x-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                <span className="text-sm">Atualizar</span>
+              </button>
+              
               <select
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
@@ -204,12 +194,45 @@ const EnhancedClientDashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* Insights Section */}
+        {insights.length > 0 && showInsights && (
+          <div className="mb-8">
+            <div className="card-ultra-modern p-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-800">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Lightbulb className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-300">
+                      Insights Personalizados
+                    </h3>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {insights.map((insight, index) => (
+                      <p key={index} className="text-blue-800 dark:text-blue-200 text-sm">
+                        {insight}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+                
+                <button
+                  onClick={() => setShowInsights(false)}
+                  className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 ml-4"
+                >
+                  <AlertCircle className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Enhanced Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {[
             {
               title: 'Total Gasto',
-              value: `R$ ${dashboardData.stats.totalSpent}`,
+              value: `R$ ${dashboardData.totalSpent.toLocaleString('pt-BR')}`,
               change: '+12%',
               changeType: 'increase',
               icon: DollarSign,
@@ -218,8 +241,8 @@ const EnhancedClientDashboard: React.FC = () => {
             },
             {
               title: 'Serviços Contratados',
-              value: dashboardData.stats.totalServices,
-              change: '+3',
+              value: dashboardData.totalServices,
+              change: `+${Math.floor(dashboardData.totalServices * 0.1)}`,
               changeType: 'increase',
               icon: CheckCircle2,
               color: 'from-blue-500 to-cyan-500',
@@ -227,7 +250,7 @@ const EnhancedClientDashboard: React.FC = () => {
             },
             {
               title: 'Avaliação Média',
-              value: dashboardData.stats.averageRating,
+              value: dashboardData.averageRating.toFixed(1),
               change: '+0.2',
               changeType: 'increase',
               icon: Star,
@@ -236,8 +259,8 @@ const EnhancedClientDashboard: React.FC = () => {
             },
             {
               title: 'Economia Total',
-              value: `R$ ${dashboardData.stats.savedAmount}`,
-              change: '+R$ 50',
+              value: `R$ ${dashboardData.savedAmount.toLocaleString('pt-BR')}`,
+              change: `+R$ ${Math.floor(dashboardData.savedAmount * 0.1)}`,
               changeType: 'increase',
               icon: TrendingUp,
               color: 'from-purple-500 to-pink-500',
@@ -298,43 +321,55 @@ const EnhancedClientDashboard: React.FC = () => {
                 >
                   <MessageCircle className="w-8 h-8 mb-4 group-hover:scale-110 transition-transform duration-300" />
                   <h3 className="text-lg font-semibold mb-2">Mensagens</h3>
-                  <p className="text-purple-100 text-sm">5 não lidas</p>
+                  <p className="text-purple-100 text-sm">Converse com profissionais</p>
                 </Link>
               </div>
             </div>
 
-            {/* Spending Chart */}
+            {/* Enhanced Monthly Spending Chart */}
             <div className="card-ultra-modern p-6">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Gastos Mensais</h2>
-                <BarChart3 className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Gastos por Período</h2>
+                <div className="flex items-center space-x-2">
+                  <BarChart3 className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Total: R$ {dashboardData.totalSpent.toLocaleString('pt-BR')}
+                  </span>
+                </div>
               </div>
               
               <div className="space-y-4">
-                {dashboardData.monthlySpending.map((data: any, index: number) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-12">{data.month}</span>
-                    <div className="flex-1 mx-4">
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-                        <div
-                          className="bg-gradient-to-r from-blue-500 to-purple-500 h-3 rounded-full transition-all duration-1000"
-                          style={{ 
-                            width: `${(data.amount / Math.max(...dashboardData.monthlySpending.map((m: any) => m.amount))) * 100}%` 
-                          }}
-                        />
+                {dashboardData.monthlySpending.map((data, index) => {
+                  const maxAmount = Math.max(...dashboardData.monthlySpending.map(m => m.amount));
+                  const percentage = (data.amount / maxAmount) * 100;
+                  
+                  return (
+                    <div key={index} className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-12">
+                        {data.month}
+                      </span>
+                      <div className="flex-1 mx-4">
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 relative overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-blue-500 to-purple-500 h-4 rounded-full transition-all duration-1000 relative"
+                            style={{ width: `${percentage}%` }}
+                          >
+                            <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right w-20">
+                        <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                          R$ {data.amount.toLocaleString('pt-BR')}
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                        R$ {data.amount}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
-            {/* Recent Services */}
+            {/* Enhanced Recent Services */}
             <div className="card-ultra-modern p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">Serviços Recentes</h2>
@@ -342,15 +377,15 @@ const EnhancedClientDashboard: React.FC = () => {
                   to="/bookings"
                   className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium text-sm"
                 >
-                  Ver todos
+                  Ver todos ({dashboardData.totalServices})
                 </Link>
               </div>
 
               <div className="space-y-4">
-                {dashboardData.recentServices.map((service: any) => (
+                {dashboardData.recentServices.map((service) => (
                   <div key={service.id} className="flex items-center space-x-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors duration-300 group">
                     <img
-                      src={service.image}
+                      src={service.image || `https://images.pexels.com/photos/257736/pexels-photo-257736.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=2`}
                       alt={service.title}
                       className="w-16 h-16 rounded-xl object-cover group-hover:scale-105 transition-transform duration-300"
                     />
@@ -372,21 +407,41 @@ const EnhancedClientDashboard: React.FC = () => {
                         {service.rating && (
                           <div className="flex items-center space-x-1">
                             <Star className="w-4 h-4 text-yellow-400 fill-current" />
-                            <span>{service.rating}</span>
+                            <span>{service.rating.toFixed(1)}</span>
                           </div>
                         )}
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-bold text-gray-900 dark:text-white">R$ {service.price}</p>
+                      <p className="text-lg font-bold text-gray-900 dark:text-white">
+                        R$ {service.price.toLocaleString('pt-BR')}
+                      </p>
                     </div>
                   </div>
                 ))}
               </div>
+
+              {dashboardData.recentServices.length === 0 && (
+                <div className="text-center py-8">
+                  <Target className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                    Nenhum serviço ainda
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    Comece contratando seu primeiro profissional!
+                  </p>
+                  <Link
+                    to="/search"
+                    className="btn-primary px-6 py-3"
+                  >
+                    Buscar Profissionais
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Sidebar */}
+          {/* Enhanced Sidebar */}
           <div className="space-y-6">
             
             {/* Category Spending */}
@@ -397,11 +452,11 @@ const EnhancedClientDashboard: React.FC = () => {
               </div>
               
               <div className="space-y-4">
-                {dashboardData.categorySpending.map((category: any, index: number) => (
+                {dashboardData.categorySpending.map((category, index) => (
                   <div key={index} className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                       <div 
-                        className="w-3 h-3 rounded-full"
+                        className="w-4 h-4 rounded-full"
                         style={{ backgroundColor: `hsl(${index * 60}, 70%, 50%)` }}
                       />
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -410,7 +465,7 @@ const EnhancedClientDashboard: React.FC = () => {
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                        R$ {category.amount}
+                        R$ {category.amount.toLocaleString('pt-BR')}
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         {category.percentage}%
@@ -421,13 +476,13 @@ const EnhancedClientDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Upcoming Bookings */}
+            {/* Enhanced Upcoming Bookings */}
             <div className="card-ultra-modern p-6">
               <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Próximos Agendamentos</h3>
               
               <div className="space-y-4">
-                {dashboardData.upcomingBookings.map((booking: any) => (
-                  <div key={booking.id} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                {dashboardData.upcomingBookings.map((booking) => (
+                  <div key={booking.id} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-semibold text-gray-900 dark:text-white text-sm">
                         {booking.title}
@@ -462,15 +517,15 @@ const EnhancedClientDashboard: React.FC = () => {
               </Link>
             </div>
 
-            {/* Recommendations */}
+            {/* Enhanced Recommendations */}
             <div className="card-ultra-modern p-6">
               <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Recomendações</h3>
               
               <div className="space-y-4">
-                {dashboardData.recommendations.map((rec: any) => (
+                {dashboardData.recommendations.map((rec) => (
                   <div key={rec.id} className="flex items-center space-x-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors cursor-pointer group">
                     <img
-                      src={rec.image}
+                      src={rec.image || `https://images.pexels.com/photos/257736/pexels-photo-257736.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=2`}
                       alt={rec.title}
                       className="w-12 h-12 rounded-lg object-cover group-hover:scale-105 transition-transform duration-300"
                     />
@@ -479,13 +534,16 @@ const EnhancedClientDashboard: React.FC = () => {
                         {rec.title}
                       </h4>
                       <p className="text-xs text-gray-600 dark:text-gray-400">{rec.professional}</p>
+                      {rec.reason && (
+                        <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">{rec.reason}</p>
+                      )}
                       <div className="flex items-center space-x-2 mt-1">
                         <div className="flex items-center space-x-1">
                           <Star className="w-3 h-3 text-yellow-400 fill-current" />
-                          <span className="text-xs text-gray-600 dark:text-gray-400">{rec.rating}</span>
+                          <span className="text-xs text-gray-600 dark:text-gray-400">{rec.rating.toFixed(1)}</span>
                         </div>
                         <span className="text-xs font-semibold text-gray-900 dark:text-white">
-                          R$ {rec.price}
+                          R$ {rec.price.toLocaleString('pt-BR')}
                         </span>
                       </div>
                     </div>
@@ -494,7 +552,7 @@ const EnhancedClientDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Quick Stats */}
+            {/* Enhanced Quick Stats */}
             <div className="card-ultra-modern p-6">
               <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Estatísticas Rápidas</h3>
               
@@ -505,7 +563,7 @@ const EnhancedClientDashboard: React.FC = () => {
                     <span className="text-sm text-gray-600 dark:text-gray-400">Favoritos</span>
                   </div>
                   <span className="font-semibold text-gray-900 dark:text-white">
-                    {dashboardData.stats.favoriteServices}
+                    {dashboardData.favoriteServices}
                   </span>
                 </div>
                 
@@ -515,7 +573,7 @@ const EnhancedClientDashboard: React.FC = () => {
                     <span className="text-sm text-gray-600 dark:text-gray-400">Ativos</span>
                   </div>
                   <span className="font-semibold text-gray-900 dark:text-white">
-                    {dashboardData.stats.activeBookings}
+                    {dashboardData.activeBookings}
                   </span>
                 </div>
                 
@@ -525,7 +583,17 @@ const EnhancedClientDashboard: React.FC = () => {
                     <span className="text-sm text-gray-600 dark:text-gray-400">Avaliações</span>
                   </div>
                   <span className="font-semibold text-gray-900 dark:text-white">
-                    {dashboardData.stats.totalServices}
+                    {dashboardData.totalServices}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <TrendingUp className="w-4 h-4 text-green-500" />
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Economia</span>
+                  </div>
+                  <span className="font-semibold text-green-600 dark:text-green-400">
+                    R$ {dashboardData.savedAmount.toLocaleString('pt-BR')}
                   </span>
                 </div>
               </div>
