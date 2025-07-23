@@ -1,0 +1,16 @@
+{
+  "name": "crm-corretora-seguros",
+  "version": "1.0.0",
+  "description": "Sistema CRM local para gestão de corretora de seguros, desenvolvido em Electron + React + Node.js + MySQL.",
+  "main": "electron.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "concurrently": "^9.2.0",
+    "electron": "^37.2.3"
+  }
+}
