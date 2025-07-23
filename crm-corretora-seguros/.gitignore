@@ -1,0 +1,22 @@
+# Node
+node_modules/
+.env
+
+# React
+app/build/
+app/node_modules/
+
+# Electron
+*.log
+
+# Database/Backups
+database/*.sql
+*.sqlite
+*.db
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Outros
+backend/node_modules/
