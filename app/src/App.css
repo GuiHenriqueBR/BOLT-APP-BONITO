@@ -1,0 +1,10 @@
+body, html, #root, .App {
+  height: 100%;
+  margin: 0;
+  font-family: 'Inter', Arial, sans-serif;
+  background: #f5f6fa;
+}
+.App {
+  display: flex;
+  min-height: 100vh;
+}

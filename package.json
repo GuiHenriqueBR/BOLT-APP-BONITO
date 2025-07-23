@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "start": "concurrently \"npm run backend\" \"npm run frontend\" \"npm run electron\"",
+    "backend": "cd backend && node server.js",
+    "frontend": "cd app && npm start",
+    "electron": "electron ."
   },
   "dependencies": {
     "@nestjs/config": "^4.0.2",
